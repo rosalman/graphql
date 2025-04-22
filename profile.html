@@ -1,0 +1,41 @@
+<!-- filepath: profile.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Profile</title>
+    <link rel="stylesheet" href="style.css"> <!-- Assuming you have/will create style.css -->
+</head>
+<body>
+    <h1>User Profile</h1>
+
+    <div id="userInfo">
+        <h2>User Details</h2>
+        <p><strong>Login:</strong> <span id="userLogin">Loading...</span></p>
+        <p><strong>Total XP:</strong> <span id="userXP">Loading...</span></p>
+        <!-- Add more placeholders for other info you want to display -->
+        <p><strong>Audits Ratio:</strong> <span id="userAudits">Loading...</span></p>
+    </div>
+
+    <div id="statistics">
+        <h2>Statistics</h2>
+        <div id="xpOverTimeGraph">
+            <h3>XP Over Time</h3>
+            <!-- SVG for XP over time graph will be generated here -->
+            <svg width="400" height="200" id="svgXpOverTime"></svg>
+        </div>
+        <div id="passFailRatioGraph">
+            <h3>Pass/Fail Ratio</h3>
+            <!-- SVG for pass/fail ratio graph will be generated here -->
+            <svg width="400" height="200" id="svgPassFail"></svg>
+        </div>
+        <!-- Add more divs if you plan other graphs -->
+    </div>
+
+    <button id="logoutButton">Logout</button>
+
+    <!-- Link to the new profile script -->
+    <script src="profile.js"></script>
+</body>
+</html>
