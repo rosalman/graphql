@@ -5,6 +5,9 @@ async function fetchGraphQL(query, token) {
     // Use the domain from script.js, ensure it's correct
     const graphqlEndpoint = 'https://learn.reboot01.com/api/graphql-engine/v1/graphql';
     try {
+        // Log the token being sent (useful for debugging)
+        console.log("Token string being sent in fetch:", token);
+
         const response = await fetch(graphqlEndpoint, {
             method: 'POST',
             headers: {
@@ -16,7 +19,15 @@ async function fetchGraphQL(query, token) {
 
         if (!response.ok) {
             const errorBody = await response.text();
-            throw new Error(`GraphQL request failed: ${response.status} ${errorBody}`);
+            // Attempt to parse error body if it's JSON from Hasura
+            let serverErrorMsg = errorBody;
+            try {
+                const errorJson = JSON.parse(errorBody);
+                if (errorJson && errorJson.message) {
+                    serverErrorMsg = errorJson.message;
+                }
+            } catch(e) { /* Ignore parsing error, use raw body */ }
+            throw new Error(`GraphQL request failed: ${response.status} ${serverErrorMsg}`);
         }
 
         const result = await response.json();
@@ -34,21 +45,26 @@ async function fetchGraphQL(query, token) {
              userInfoDiv.innerHTML = `<p style="color: red;">Error loading profile data. Please check console or try logging in again.</p><p style="color: red; font-size: 0.8em;">${error.message}</p>`;
         }
         // Clear other fields potentially
-        document.getElementById('userLogin').textContent = 'Error';
-        document.getElementById('userXP').textContent = 'Error';
-        document.getElementById('userAudits').textContent = 'Error';
+        const userLoginSpan = document.getElementById('userLogin');
+        const userXPSpan = document.getElementById('userXP');
+        const userAuditsSpan = document.getElementById('userAudits');
+        if(userLoginSpan) userLoginSpan.textContent = 'Error';
+        if(userXPSpan) userXPSpan.textContent = 'Error';
+        if(userAuditsSpan) userAuditsSpan.textContent = 'Error';
         return null; // Indicate failure
     }
 }
 
 // Function to format XP amount (Bytes to kB/MB)
 function formatXP(amount) {
-    if (amount === null || amount === undefined) return '0';
+    if (amount === null || amount === undefined) return '0 B'; // Return '0 B' for consistency
     if (amount < 1000) {
         return `${amount} B`;
     } else if (amount < 1000000) {
-        return `${(amount / 1000).toFixed(2)} kB`;
+        // Use 1 decimal place for kB as per common convention
+        return `${(amount / 1000).toFixed(1)} kB`;
     } else {
+        // Use 2 decimal places for MB
         return `${(amount / 1000000).toFixed(2)} MB`;
     }
 }
@@ -98,7 +114,9 @@ async function displayProfileData(token) {
             # object { name } # Nested query if needed
           }
           # Example: Audit results (pass/fail)
-          auditsDone: audit(where: {grade: {_is_null: false}}, order_by: {createdAt: asc}) { # Assuming JWT scopes to auditorId = user.id
+          # Note: This assumes the JWT implicitly filters audits to the current user.
+          # If not, you might need to get user.id first and add a where clause.
+          auditsDone: audit(where: {grade: {_is_null: false}}, order_by: {createdAt: asc}) {
              grade
              createdAt
              # object { name } # Need to link audit -> group -> object? Or audit -> result -> object? Check relations
@@ -132,13 +150,15 @@ async function displayProfileData(token) {
         const totalDown = data.auditDown?.aggregate?.sum?.amount ?? 0;
         let auditRatio = 'N/A';
         if (totalDown > 0) {
-            auditRatio = (totalUp / totalDown).toFixed(2);
+            // Format ratio to one decimal place like the example
+            auditRatio = (totalUp / totalDown).toFixed(1);
         } else if (totalUp > 0) {
-            auditRatio = 'Infinity (No down audits)';
+            auditRatio = 'Infinity'; // Or just display Up/Down amounts
         } else {
-            auditRatio = '0.00 (No audits)';
+            auditRatio = '0.0'; // Or 'N/A' if preferred
         }
-        document.getElementById('userAudits').textContent = `${auditRatio} (Up: ${formatXP(totalUp)} / Down: ${formatXP(totalDown)})`;
+        // Display ratio and amounts separately for clarity
+        document.getElementById('userAudits').textContent = `Ratio: ${auditRatio} (Done: ${formatXP(totalUp)} / Received: ${formatXP(totalDown)})`;
 
 
         // --- Call functions to render SVG graphs ---
@@ -153,6 +173,7 @@ async function displayProfileData(token) {
 }
 
 // --- SVG Graph Rendering Functions (Placeholders - Implement these next) ---
+// NOTE: These are basic implementations and likely need refinement
 
 function renderXpOverTimeGraph(xpData) {
     console.log("Rendering XP over time graph with data:", xpData);
@@ -194,20 +215,42 @@ function renderXpOverTimeGraph(xpData) {
     });
 
     // 4. Define scales (time for X, linear for Y)
+    // Ensure dates are valid before finding min/max
+    const validDates = processedData.map(d => d.date.getTime()).filter(t => !isNaN(t));
+    if (validDates.length === 0) {
+         const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        text.setAttribute("x", width / 2);
+        text.setAttribute("y", height / 2);
+        text.setAttribute("text-anchor", "middle");
+        text.textContent = "Invalid date data.";
+        g.appendChild(text);
+        return;
+    }
+    const minDate = new Date(Math.min(...validDates));
+    const maxDate = new Date(Math.max(...validDates));
+
     const xScale = {
-        min: processedData[0].date,
-        max: processedData[processedData.length - 1].date,
+        min: minDate,
+        max: maxDate,
         range: width
     };
     const yScale = {
         min: 0, // Start Y axis at 0
-        max: Math.max(...processedData.map(d => d.value)), // Find max XP value
+        max: Math.max(1, ...processedData.map(d => d.value)), // Ensure max is at least 1 to avoid division by zero
         range: height
     };
 
     // Helper to map data value to SVG coordinate
-    const mapX = (date) => ((date - xScale.min) / (xScale.max - xScale.min)) * xScale.range;
-    const mapY = (value) => yScale.range - ((value - yScale.min) / (yScale.max - yScale.min)) * yScale.range; // Invert Y for SVG
+    const mapX = (date) => {
+        const timeDiff = xScale.max.getTime() - xScale.min.getTime();
+        if (timeDiff <= 0) return 0; // Avoid division by zero if only one data point
+        return ((date.getTime() - xScale.min.getTime()) / timeDiff) * xScale.range;
+    }
+    const mapY = (value) => {
+        const valueRange = yScale.max - yScale.min;
+        if (valueRange <= 0) return yScale.range; // Avoid division by zero
+        return yScale.range - ((value - yScale.min) / valueRange) * yScale.range; // Invert Y for SVG
+    }
 
     // 5. Draw Axes (basic lines and labels)
     // X Axis Line
@@ -230,7 +273,7 @@ function renderXpOverTimeGraph(xpData) {
     // Add Axis Labels (simple)
     const xLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
     xLabel.setAttribute("x", width / 2);
-    xLabel.setAttribute("y", height + margin.bottom - 5);
+    xLabel.setAttribute("y", height + margin.bottom - 10); // Adjusted position
     xLabel.setAttribute("text-anchor", "middle");
     xLabel.textContent = "Time";
     g.appendChild(xLabel);
@@ -238,34 +281,50 @@ function renderXpOverTimeGraph(xpData) {
     const yLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
     yLabel.setAttribute("transform", "rotate(-90)");
     yLabel.setAttribute("x", -height / 2);
-    yLabel.setAttribute("y", -margin.left + 15);
+    yLabel.setAttribute("y", -margin.left + 20); // Adjusted position
     yLabel.setAttribute("text-anchor", "middle");
     yLabel.textContent = "Cumulative XP";
     g.appendChild(yLabel);
 
     // 6. Draw the data (e.g., a line chart)
     const linePath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    let dAttribute = "M"; // Start path command
+    let dAttribute = "";
     processedData.forEach((point, index) => {
+        if (isNaN(point.date.getTime())) return; // Skip invalid dates
         const x = mapX(point.date);
         const y = mapY(point.value);
-        dAttribute += `${x},${y}${index === 0 ? "" : " L"}`; // MoveTo first point, LineTo subsequent points
+        if (index === 0 || dAttribute === "") {
+            dAttribute += `M${x},${y}`; // MoveTo first valid point
+        } else {
+            dAttribute += ` L${x},${y}`; // LineTo subsequent valid points
+        }
     });
-    linePath.setAttribute("d", dAttribute.trim());
-    linePath.setAttribute("fill", "none");
-    linePath.setAttribute("stroke", "steelblue");
-    linePath.setAttribute("stroke-width", 2);
-    g.appendChild(linePath);
 
-    // Add points (optional)
-    processedData.forEach(point => {
-        const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        circle.setAttribute("cx", mapX(point.date));
-        circle.setAttribute("cy", mapY(point.value));
-        circle.setAttribute("r", 3);
-        circle.setAttribute("fill", "steelblue");
-        g.appendChild(circle);
-    });
+    if (dAttribute) { // Only draw if path data exists
+        linePath.setAttribute("d", dAttribute);
+        linePath.setAttribute("fill", "none");
+        linePath.setAttribute("stroke", "steelblue");
+        linePath.setAttribute("stroke-width", 2);
+        g.appendChild(linePath);
+
+        // Add points (optional)
+        processedData.forEach(point => {
+            if (isNaN(point.date.getTime())) return; // Skip invalid dates
+            const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            circle.setAttribute("cx", mapX(point.date));
+            circle.setAttribute("cy", mapY(point.value));
+            circle.setAttribute("r", 3);
+            circle.setAttribute("fill", "steelblue");
+            g.appendChild(circle);
+        });
+    } else {
+         const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        text.setAttribute("x", width / 2);
+        text.setAttribute("y", height / 2);
+        text.setAttribute("text-anchor", "middle");
+        text.textContent = "No valid data points to draw.";
+        g.appendChild(text);
+    }
 }
 
 
@@ -278,7 +337,7 @@ function renderPassFailRatioGraph(auditData) {
     // --- Basic SVG rendering logic for a Pie/Donut Chart ---
     const width = +svg.getAttribute('width');
     const height = +svg.getAttribute('height');
-    const radius = Math.min(width, height) / 2 - 10; // Margin of 10
+    const radius = Math.min(width, height) / 2 - 20; // Increased margin for labels
     const centerX = width / 2;
     const centerY = height / 2;
 
@@ -300,10 +359,13 @@ function renderPassFailRatioGraph(auditData) {
     let passes = 0;
     let fails = 0;
     auditData.forEach(audit => {
-        if (audit.grade >= 1) {
-            passes++;
-        } else {
-            fails++;
+        // Ensure grade is a number before comparing
+        if (typeof audit.grade === 'number') {
+            if (audit.grade >= 1) {
+                passes++;
+            } else {
+                fails++;
+            }
         }
     });
     const total = passes + fails;
@@ -313,7 +375,7 @@ function renderPassFailRatioGraph(auditData) {
         text.setAttribute("x", 0);
         text.setAttribute("y", 0);
         text.setAttribute("text-anchor", "middle");
-        text.textContent = "No completed audits.";
+        text.textContent = "No completed audits with valid grades.";
         g.appendChild(text);
         return;
     }
@@ -323,11 +385,12 @@ function renderPassFailRatioGraph(auditData) {
     const passAngle = (passes / total) * 2 * Math.PI;
     const failAngle = (fails / total) * 2 * Math.PI;
 
-    let startAngle = 0;
+    let currentAngle = -Math.PI / 2; // Start at the top
 
     // Helper function to create a pie slice path
     function createSlice(startAngle, endAngle, color) {
         const largeArcFlag = endAngle - startAngle <= Math.PI ? "0" : "1";
+        // Calculate start and end points on the circle
         const startX = radius * Math.cos(startAngle);
         const startY = radius * Math.sin(startAngle);
         const endX = radius * Math.cos(endAngle);
@@ -345,58 +408,88 @@ function renderPassFailRatioGraph(auditData) {
     // 3. Draw slices
     // Pass Slice (Green)
     if (passes > 0) {
-        const passSlice = createSlice(startAngle, startAngle + passAngle, "mediumseagreen");
+        const passSlice = createSlice(currentAngle, currentAngle + passAngle, "mediumseagreen");
         g.appendChild(passSlice);
-        startAngle += passAngle;
+        currentAngle += passAngle;
     }
 
     // Fail Slice (Red)
     if (fails > 0) {
-        const failSlice = createSlice(startAngle, startAngle + failAngle, "tomato");
+        const failSlice = createSlice(currentAngle, currentAngle + failAngle, "tomato");
         g.appendChild(failSlice);
     }
 
-    // 4. Add Labels (optional, simple text)
+    // 4. Add Labels (optional, simple text near the center)
     const passPercentage = ((passes / total) * 100).toFixed(1);
     const failPercentage = ((fails / total) * 100).toFixed(1);
 
-    const passLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    passLabel.setAttribute("x", 10); // Position labels outside the pie for simplicity
-    passLabel.setAttribute("y", -centerY + 20);
-    passLabel.textContent = `Pass: ${passes} (${passPercentage}%)`;
-    passLabel.setAttribute("fill", "mediumseagreen");
-    g.appendChild(passLabel);
+    // Add a title or center text
+    const titleText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    titleText.setAttribute("x", 0);
+    titleText.setAttribute("y", -10); // Position above center
+    titleText.setAttribute("text-anchor", "middle");
+    titleText.setAttribute("font-size", "10px");
+    titleText.textContent = `Pass: ${passPercentage}%`;
+    titleText.setAttribute("fill", "mediumseagreen");
+    g.appendChild(titleText);
 
-    const failLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    failLabel.setAttribute("x", 10);
-    failLabel.setAttribute("y", -centerY + 40);
-    failLabel.textContent = `Fail: ${fails} (${failPercentage}%)`;
-    failLabel.setAttribute("fill", "tomato");
-    g.appendChild(failLabel);
+    const failText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    failText.setAttribute("x", 0);
+    failText.setAttribute("y", 10); // Position below center
+    failText.setAttribute("text-anchor", "middle");
+    failText.setAttribute("font-size", "10px");
+    failText.textContent = `Fail: ${failPercentage}%`;
+    failText.setAttribute("fill", "tomato");
+    g.appendChild(failText);
 
 }
 
 
-// Function to handle logout
-function logout() {
-    localStorage.removeItem('jwtToken'); // Clear the token
-    console.log('Logged out, token removed.');
+// *** MODIFIED: Function to handle logout using cookies ***
+async function logout() { // Make logout async to potentially call server endpoints
+    const token = Cookies.get('jwtToken'); // Get token for potential API calls
+
+    // Optional: Call server endpoints like the working example
+    try {
+        if (token) {
+            console.log("Attempting server-side logout calls...");
+            // Call expire endpoint (optional, but good practice)
+            await fetch('https://learn.reboot01.com/api/auth/expire', {
+                method: 'GET', // Or POST depending on the API
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            // Call signout endpoint (optional, but good practice)
+            await fetch('https://learn.reboot01.com/api/auth/signout', {
+                method: 'POST', // Or GET depending on the API
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            console.log("Server-side logout calls attempted.");
+        }
+    } catch (error) {
+        console.warn('Error during server-side logout calls (may be expected if token already invalid):', error);
+        // Don't prevent client-side logout even if server calls fail
+    }
+
+    // *** Change: Remove the cookie ***
+    Cookies.remove('jwtToken'); // Use Cookies.remove
+    console.log('Logged out, cookie removed.');
     window.location.href = 'index.html'; // Redirect to login
 }
 
 // --- Execution starts here when profile.html loads ---
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Get token from localStorage
-    const token = localStorage.getItem('jwtToken');
+    // *** MODIFIED: Get token from cookie ***
+    // Make sure Cookies library is loaded via <script> tag in profile.html
+    const token = Cookies.get('jwtToken'); // Use Cookies.get
 
     if (!token) {
-        // If no token, redirect back to login
-        console.log('No token found, redirecting to login.');
+        // If no token cookie, redirect back to login
+        console.log('No token cookie found, redirecting to login.');
         window.location.href = 'index.html';
     } else {
         // Token found, fetch profile data
-        console.log('Token found, fetching profile data...');
+        console.log('Token cookie found, fetching profile data...');
         displayProfileData(token);
 
         // Add event listener for the logout button
