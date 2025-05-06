@@ -328,6 +328,7 @@ function renderXpOverTimeGraph(xpData) {
 }
 
 
+
 function renderPassFailRatioGraph(auditData) {
     console.log("Rendering Pass/Fail ratio graph with data:", auditData);
     const svg = document.getElementById('svgPassFail');
@@ -346,6 +347,7 @@ function renderPassFailRatioGraph(auditData) {
     svg.appendChild(g);
 
     if (!auditData || auditData.length === 0) {
+        // ... (keep existing no data message code) ...
         const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
         text.setAttribute("x", 0); // Centered due to transform
         text.setAttribute("y", 0); // Centered due to transform
@@ -359,7 +361,6 @@ function renderPassFailRatioGraph(auditData) {
     let passes = 0;
     let fails = 0;
     auditData.forEach(audit => {
-        // Ensure grade is a number before comparing
         if (typeof audit.grade === 'number') {
             if (audit.grade >= 1) {
                 passes++;
@@ -371,6 +372,7 @@ function renderPassFailRatioGraph(auditData) {
     const total = passes + fails;
 
     if (total === 0) {
+        // ... (keep existing no valid grades message code) ...
          const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
         text.setAttribute("x", 0);
         text.setAttribute("y", 0);
@@ -389,14 +391,21 @@ function renderPassFailRatioGraph(auditData) {
 
     // Helper function to create a pie slice path
     function createSlice(startAngle, endAngle, color) {
+        // *** Handle full circle case by slightly adjusting endAngle ***
+        // This is a common workaround, though drawing two halves is often cleaner
+        // if (endAngle - startAngle >= Math.PI * 2) {
+        //     endAngle = startAngle + Math.PI * 1.9999; // Slightly less than full circle
+        // }
+        // *** A better way: draw two halves for full circle ***
+        // (We'll implement this logic in the drawing section below)
+
+
         const largeArcFlag = endAngle - startAngle <= Math.PI ? "0" : "1";
-        // Calculate start and end points on the circle
         const startX = radius * Math.cos(startAngle);
         const startY = radius * Math.sin(startAngle);
         const endX = radius * Math.cos(endAngle);
         const endY = radius * Math.sin(endAngle);
 
-        // d attribute for the path: M origin L start_point A radius,radius 0 largeArcFlag,1 end_point Z close_path
         const d = `M 0,0 L ${startX},${startY} A ${radius},${radius} 0 ${largeArcFlag} 1 ${endX},${endY} Z`;
 
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
@@ -406,43 +415,61 @@ function renderPassFailRatioGraph(auditData) {
     }
 
     // 3. Draw slices
-    // Pass Slice (Green)
-    if (passes > 0) {
-        const passSlice = createSlice(currentAngle, currentAngle + passAngle, "mediumseagreen");
-        g.appendChild(passSlice);
-        currentAngle += passAngle;
+    // *** Modified logic to handle 100% cases ***
+    if (passes === total) { // 100% Pass
+        // Draw two green semi-circles
+        const halfAngle = Math.PI;
+        const slice1 = createSlice(currentAngle, currentAngle + halfAngle, "mediumseagreen");
+        const slice2 = createSlice(currentAngle + halfAngle, currentAngle + 2 * halfAngle, "mediumseagreen");
+        g.appendChild(slice1);
+        g.appendChild(slice2);
+    } else if (fails === total) { // 100% Fail
+        // Draw two red semi-circles
+        const halfAngle = Math.PI;
+        const slice1 = createSlice(currentAngle, currentAngle + halfAngle, "tomato");
+        const slice2 = createSlice(currentAngle + halfAngle, currentAngle + 2 * halfAngle, "tomato");
+        g.appendChild(slice1);
+        g.appendChild(slice2);
+    } else { // Mixed passes and fails
+        // Original logic for drawing partial slices
+        if (passes > 0) {
+            const passSlice = createSlice(currentAngle, currentAngle + passAngle, "mediumseagreen");
+            g.appendChild(passSlice);
+            currentAngle += passAngle;
+        }
+        if (fails > 0) {
+            const failSlice = createSlice(currentAngle, currentAngle + failAngle, "tomato");
+            g.appendChild(failSlice);
+        }
     }
 
-    // Fail Slice (Red)
-    if (fails > 0) {
-        const failSlice = createSlice(currentAngle, currentAngle + failAngle, "tomato");
-        g.appendChild(failSlice);
-    }
 
-    // 4. Add Labels (optional, simple text near the center)
+    // 4. Add Labels (Set to a contrasting color like black)
     const passPercentage = ((passes / total) * 100).toFixed(1);
     const failPercentage = ((fails / total) * 100).toFixed(1);
 
-    // Add a title or center text
     const titleText = document.createElementNS("http://www.w3.org/2000/svg", "text");
     titleText.setAttribute("x", 0);
-    titleText.setAttribute("y", -10); // Position above center
+    titleText.setAttribute("y", -10);
     titleText.setAttribute("text-anchor", "middle");
     titleText.setAttribute("font-size", "10px");
     titleText.textContent = `Pass: ${passPercentage}%`;
-    titleText.setAttribute("fill", "mediumseagreen");
+    // *** Change fill to black for contrast ***
+    titleText.setAttribute("fill", "black");
     g.appendChild(titleText);
 
     const failText = document.createElementNS("http://www.w3.org/2000/svg", "text");
     failText.setAttribute("x", 0);
-    failText.setAttribute("y", 10); // Position below center
+    failText.setAttribute("y", 10);
     failText.setAttribute("text-anchor", "middle");
     failText.setAttribute("font-size", "10px");
     failText.textContent = `Fail: ${failPercentage}%`;
-    failText.setAttribute("fill", "tomato");
+    // *** Change fill to black for contrast ***
+    failText.setAttribute("fill", "black");
     g.appendChild(failText);
 
 }
+
 
 
 // *** MODIFIED: Function to handle logout using cookies ***
