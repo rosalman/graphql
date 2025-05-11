@@ -47,7 +47,8 @@ button:hover {
 }
 
 /* --- Profile Page Styles --- */
-#userInfo, #statistics {
+/* Combined styles for all main content sections on the profile page */
+#userInfo, #statistics, #userGradesInfo {
     background-color: #fff;
     padding: 1.5em;
     margin-bottom: 1.5em;
@@ -55,7 +56,8 @@ button:hover {
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-#userInfo p, #statistics h3 {
+/* Styles for paragraphs within userInfo and h3/h2 elements within other sections */
+#userInfo p, #statistics h3, #userGradesInfo h2 {
     margin-bottom: 0.8em;
 }
 
@@ -63,6 +65,24 @@ button:hover {
     color: #555;
 }
 
+/* Styles for the grades list */
+#userGradesInfo ul {
+    list-style-type: none;
+    padding-left: 0;
+    margin-top: 0; /* Remove default top margin for ul */
+}
+
+#userGradesInfo li {
+    padding: 0.4em 0; /* Add some padding to list items */
+    border-bottom: 1px solid #eee; /* Separator line */
+    font-size: 0.9em; /* Slightly smaller font for list items */
+}
+
+#userGradesInfo li:last-child {
+    border-bottom: none; /* Remove border from the last item */
+}
+
+/* Styles for SVG elements within the statistics section */
 #statistics svg {
     display: block; /* Prevent extra space below SVG */
     background-color: #f9f9f9;

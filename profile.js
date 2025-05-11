@@ -70,18 +70,14 @@ function formatXP(amount) {
 }
 
 
-// Function to fetch and display profile data
+// Function to fetch and display profile data// ...existing code...
 async function displayProfileData(token) {
-    // GraphQL query to get user info, total XP, and audit transaction sums
-    // Assumes the JWT token scopes the queries to the logged-in user
     const query = `
         query GetUserProfileData {
-          # Get user's login and ID (ID might be useful for other queries)
           user {
             id
             login
           }
-          # Aggregate total XP transactions for the user
           xp: transaction_aggregate(where: {type: {_eq: "xp"}}) {
             aggregate {
               sum {
@@ -89,39 +85,42 @@ async function displayProfileData(token) {
               }
             }
           }
-          # Aggregate total "up" audit transactions (XP gained from auditing others)
-          auditUp: transaction_aggregate(where: {type: {_eq: "up"}}) {
-             aggregate {
-               sum {
-                 amount
-               }
-             }
-          }
-          # Aggregate total "down" audit transactions (XP lost from being audited)
-          auditDown: transaction_aggregate(where: {type: {_eq: "down"}}) {
-             aggregate {
-               sum {
-                 amount
-               }
-             }
-          }
-          # You might need more queries here for graph data later
-          # Example: XP transactions over time
+          # --- TEMPORARILY COMMENTED OUT ---
+          # auditUp: transaction_aggregate(where: {type: {_eq: "up"}}) {
+          #    aggregate {
+          #      sum {
+          #        amount
+          #      }
+          #    }
+          # }
+          # auditDown: transaction_aggregate(where: {type: {_eq: "down"}}) {
+          #    aggregate {
+          #      sum {
+          #        amount
+          #      }
+          #    }
+          # }
+          # --- END OF TEMPORARY COMMENT ---
           xpTransactions: transaction(where: {type: {_eq: "xp"}}, order_by: {createdAt: asc}) {
             amount
             createdAt
-            objectId # Could link to object table for project name
-            # object { name } # Nested query if needed
+            objectId
           }
-          # Example: Audit results (pass/fail)
-          # Note: This assumes the JWT implicitly filters audits to the current user.
-          # If not, you might need to get user.id first and add a where clause.
           auditsDone: audit(where: {grade: {_is_null: false}}, order_by: {createdAt: asc}) {
              grade
              createdAt
-             # object { name } # Need to link audit -> group -> object? Or audit -> result -> object? Check relations
           }
-
+          completedProjects: progress(
+            where: { isDone: {_eq: true}, grade: { _is_null: false } }
+            order_by: { updatedAt: desc }
+            limit: 10
+          ) {
+            grade
+            updatedAt
+            object {
+              name
+            }
+          }
         }
     `;
 
@@ -135,42 +134,61 @@ async function displayProfileData(token) {
         if (data.user && data.user.length > 0) {
             const user = data.user[0];
             document.getElementById('userLogin').textContent = user.login || 'N/A';
-            console.log("User ID:", user.id); // Log user ID for potential debugging
+            console.log("User ID:", user.id);
         } else {
              document.getElementById('userLogin').textContent = 'Not found';
              console.warn("User data not found in response.");
         }
 
-        // Populate total XP
         const totalXp = data.xp?.aggregate?.sum?.amount;
         document.getElementById('userXP').textContent = formatXP(totalXp);
 
-        // Calculate and populate Audit Ratio (Up / Down)
-        const totalUp = data.auditUp?.aggregate?.sum?.amount ?? 0;
-        const totalDown = data.auditDown?.aggregate?.sum?.amount ?? 0;
+        // --- ADJUSTED FOR TEMPORARY REMOVAL ---
+        const totalUp = data.auditUp?.aggregate?.sum?.amount ?? 0; // Will be 0 if auditUp is commented out
+        const totalDown = data.auditDown?.aggregate?.sum?.amount ?? 0; // Will be 0 if auditDown is commented out
         let auditRatio = 'N/A';
+        // Keep the logic, it will just show 0 for up/down if they are not fetched
         if (totalDown > 0) {
-            // Format ratio to one decimal place like the example
             auditRatio = (totalUp / totalDown).toFixed(1);
         } else if (totalUp > 0) {
-            auditRatio = 'Infinity'; // Or just display Up/Down amounts
+            auditRatio = 'Infinity';
         } else {
-            auditRatio = '0.0'; // Or 'N/A' if preferred
+            auditRatio = '0.0';
         }
-        // Display ratio and amounts separately for clarity
         document.getElementById('userAudits').textContent = `Ratio: ${auditRatio} (Done: ${formatXP(totalUp)} / Received: ${formatXP(totalDown)})`;
+        // --- END OF ADJUSTMENT ---
+
+        // Populate Grades
+        const gradesList = document.getElementById('userGradesList');
+        if (data.completedProjects && gradesList) {
+            gradesList.innerHTML = ''; // Clear "Loading..."
+            if (data.completedProjects.length > 0) {
+                data.completedProjects.forEach(project => {
+                    const listItem = document.createElement('li');
+                    const projectGrade = project.grade !== null ? project.grade.toFixed(2) : 'N/A';
+                    const completionDate = project.updatedAt ? new Date(project.updatedAt).toLocaleDateString() : 'N/A';
+                    listItem.textContent = `${project.object?.name || 'Unknown Project'}: ${projectGrade} (Graded: ${completionDate})`;
+                    gradesList.appendChild(listItem);
+                });
+            } else {
+                gradesList.innerHTML = '<li>No completed projects with grades found.</li>';
+            }
+        } else if (gradesList) {
+            // This case might occur if data.completedProjects is undefined due to a query issue
+            // or if the element userGradesList was not found (though it should be).
+            gradesList.innerHTML = '<li>Could not load grade information.</li>';
+            console.warn("Completed projects data is missing or gradesList element not found.");
+        }
 
 
-        // --- Call functions to render SVG graphs ---
-        // Pass the relevant data to the graph functions
         renderXpOverTimeGraph(data.xpTransactions || []);
-        renderPassFailRatioGraph(data.auditsDone || []); // Pass audit data
+        renderPassFailRatioGraph(data.auditsDone || []);
 
     } else {
         console.error("Failed to fetch or process profile data.");
-        // Error message is already displayed by fetchGraphQL in case of failure
     }
 }
+
 
 // --- SVG Graph Rendering Functions (Placeholders - Implement these next) ---
 // NOTE: These are basic implementations and likely need refinement
