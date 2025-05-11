@@ -472,6 +472,9 @@ function renderPassFailRatioGraph(auditData) {
 
 
 
+
+// --- START OF MODIFIED SECTION ---
+
 // Function to handle logout using cookies
 async function logout() {
     const token = Cookies.get('jwtToken'); // Get token for potential API calls
@@ -568,3 +571,4 @@ window.addEventListener('pageshow', (event) => {
         setupProfilePage();
     }
 });
+// --- END OF MODIFIED SECTION ---
