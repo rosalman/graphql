@@ -526,5 +526,16 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             console.warn('Logout button not found.');
         }
+
+        
+        // Prevent back navigation:
+        // Push the current state onto the history stack.
+        history.pushState(null, document.title, location.href);
+        // Listen for popstate event (browser back/forward button).
+        window.addEventListener('popstate', function (event) {
+            // When the user tries to go back, push the current state again,
+            // effectively keeping them on the profile page.
+            history.pushState(null, document.title, location.href);
+        });
     }
 });
