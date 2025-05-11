@@ -472,8 +472,8 @@ function renderPassFailRatioGraph(auditData) {
 
 
 
-// *** MODIFIED: Function to handle logout using cookies ***
-async function logout() { // Make logout async to potentially call server endpoints
+// Function to handle logout using cookies
+async function logout() {
     const token = Cookies.get('jwtToken'); // Get token for potential API calls
 
     // Optional: Call server endpoints like the working example
@@ -497,45 +497,74 @@ async function logout() { // Make logout async to potentially call server endpoi
         // Don't prevent client-side logout even if server calls fail
     }
 
-    // *** Change: Remove the cookie ***
     Cookies.remove('jwtToken'); // Use Cookies.remove
     console.log('Logged out, cookie removed.');
     window.location.href = 'index.html'; // Redirect to login
 }
 
-// --- Execution starts here when profile.html loads ---
+// --- Execution and Event Handling ---
 
-document.addEventListener('DOMContentLoaded', () => {
-    // *** MODIFIED: Get token from cookie ***
-    // Make sure Cookies library is loaded via <script> tag in profile.html
-    const token = Cookies.get('jwtToken'); // Use Cookies.get
+// Central function to check auth and set up the page
+function setupProfilePage() {
+    const token = Cookies.get('jwtToken');
 
     if (!token) {
-        // If no token cookie, redirect back to login
-        console.log('No token cookie found, redirecting to login.');
+        console.log('Profile setup: No token. Redirecting to login.');
         window.location.href = 'index.html';
-    } else {
-        // Token found, fetch profile data
-        console.log('Token cookie found, fetching profile data...');
-        displayProfileData(token);
+        return; // Crucial: stop further script execution for this page load
+    }
 
-        // Add event listener for the logout button
-        const logoutButton = document.getElementById('logoutButton');
-        if (logoutButton) {
+    // Token exists, proceed with setup
+    console.log('Profile setup: Token found. Initializing page.');
+    displayProfileData(token);
+
+    const logoutButton = document.getElementById('logoutButton');
+    if (logoutButton) {
+        // Check if listener already attached to prevent duplicates if setupProfilePage is called multiple times
+        if (!logoutButton.hasAttribute('data-listener-attached')) {
             logoutButton.addEventListener('click', logout);
-        } else {
-            console.warn('Logout button not found.');
+            logoutButton.setAttribute('data-listener-attached', 'true');
         }
+    } else {
+        console.warn('Logout button not found.');
+    }
 
-        
-        // Prevent back navigation:
-        // Push the current state onto the history stack.
-        history.pushState(null, document.title, location.href);
-        // Listen for popstate event (browser back/forward button).
-        window.addEventListener('popstate', function (event) {
-            // When the user tries to go back, push the current state again,
-            // effectively keeping them on the profile page.
-            history.pushState(null, document.title, location.href);
+    // Setup navigation management (prevent back, handle popstate)
+    // This should only be set up once per "true" page load.
+    if (!window.profileNavigationHandlerAttached) {
+        history.pushState(null, document.title, location.href); // Add current page to history again
+
+        window.addEventListener('popstate', function() {
+            // This event fires when the active history entry changes due to back/forward navigation
+            if (Cookies.get('jwtToken')) {
+                // If token still exists (user is logged in),
+                // and user tries to navigate away from profile.html via "back",
+                // push profile.html state again to keep them on the page.
+                history.pushState(null, document.title, location.href);
+            } else {
+                // If token does not exist (user logged out or session expired),
+                // redirect to login page.
+                window.location.href = 'index.html';
+            }
         });
+        window.profileNavigationHandlerAttached = true;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOMContentLoaded event fired.');
+    window.profileNavigationHandlerAttached = false; // Reset flag for a full page load
+    setupProfilePage();
+});
+
+window.addEventListener('pageshow', (event) => {
+    // The pageshow event fires when a session history entry is being traversed to.
+    // event.persisted is true if the page was restored from the bfcache.
+    if (event.persisted) {
+        console.log('pageshow event fired: Page was restored from bfcache.');
+        // Re-run setup. It will check token. If token is gone, it redirects.
+        // If token is present, displayProfileData will refresh data.
+        // The profileNavigationHandlerAttached flag prevents re-attaching popstate listener.
+        setupProfilePage();
     }
 });
