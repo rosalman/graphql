@@ -1,99 +1,236 @@
+/* General Body Styles */
 body {
-    font-family: sans-serif;
-    margin: 2em;
-    background-color: #f4f4f4;
-    color: #333;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    transition: background-color 0.4s ease, color 0.4s ease;
+    background-size: cover;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
 }
 
-h1, h2, h3 {
-    color: #0056b3; /* A blue tone */
+.container {
+    flex-grow: 1;
 }
 
-/* --- Login Page Styles --- */
-#loginForm div {
-    margin-bottom: 1em;
+/* Light Mode */
+body.light-mode {
+    background-color: #f8f9fa; /* Lighter grey */
+    color: #212529;
+}
+body.light-mode .card {
+    background-color: rgba(255, 255, 255, 0.95); /* More opaque white */
+    border: 1px solid #e0e0e0;
+}
+body.light-mode .card-header {
+    border-bottom: 1px solid rgba(0,0,0,.075);
+}
+body.light-mode .list-group-item {
+    background-color: transparent;
+    border-color: #e9ecef;
+}
+body.light-mode h1, body.light-mode h5, body.light-mode h6 {
+    color: #343a40;
+}
+body.light-mode .text-muted {
+    color: #6c757d !important;
+}
+body.light-mode .graph-container {
+    background-color: #f8f9fa; /* Light background for graph area */
+}
+body.light-mode #statistics svg text {
+    fill: #212529;
+}
+body.light-mode #statistics svg line {
+    stroke: #adb5bd;
 }
 
-#loginForm label {
+
+/* Dark Mode */
+body.dark-mode {
+    background-color: #1a1a1a; /* Darker background */
+    color: #f0f0f0; /* Lighter text */
+}
+body.dark-mode .card {
+    background-color: rgba(45, 45, 45, 0.9); /* Darker, slightly transparent card */
+    border: 1px solid #555;
+    color: #f0f0f0;
+}
+body.dark-mode .card-header {
+    border-bottom: 1px solid rgba(255,255,255,.1);
+}
+body.dark-mode .list-group-item {
+    background-color: transparent;
+    border-color: #555;
+}
+body.dark-mode h1, body.dark-mode h5, body.dark-mode h6 {
+    color: #ffffff;
+}
+body.dark-mode .text-muted {
+    color: #adb5bd !important;
+}
+body.dark-mode .graph-container {
+    background-color: #2c2c2c; /* Dark background for graph area */
+}
+body.dark-mode #statistics svg text {
+    fill: #f0f0f0;
+}
+body.dark-mode #statistics svg line {
+    stroke: #777;
+}
+
+
+/* Card Styling (Common) */
+.card {
+    border-radius: 0.75rem;
+    box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(8px);
+    transition: background-color 0.4s ease, border-color 0.4s ease, box-shadow 0.3s ease, transform 0.3s ease;
+}
+.card:hover {
+    transform: translateY(-5px); /* Subtle lift on hover */
+    box-shadow: 0 0.75rem 2rem rgba(0, 0, 0, 0.15);
+}
+.card-header {
+    font-weight: 500;
+    border-top-left-radius: calc(0.75rem - 1px); /* Match card border-radius */
+    border-top-right-radius: calc(0.75rem - 1px);
+}
+.card-header .card-title i {
+    vertical-align: middle;
+}
+.card-body .lead {
+    font-size: 1.1rem;
+    margin-bottom: 0.75rem;
+}
+.card-body .lead strong {
+    color: inherit; /* Ensure strong tag inherits card text color */
+}
+
+/* Statistics Graph Containers */
+.graph-container {
+    border-radius: 0.5rem;
+    border: 1px solid rgba(0,0,0,0.05);
+    transition: background-color 0.4s ease;
+}
+body.dark-mode .graph-container {
+    border: 1px solid rgba(255,255,255,0.08);
+}
+#statistics svg {
     display: block;
-    margin-bottom: 0.3em;
+    margin: auto;
+    max-width: 100%; /* Make SVGs responsive within their containers */
+    height: auto;   /* Maintain aspect ratio */
 }
 
-#loginForm input[type="text"],
-#loginForm input[type="password"] {
-    padding: 0.5em;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    width: 250px; /* Adjust as needed */
+
+/* Login Page Specifics (from original style.css, slightly adapted) */
+#loginForm { /* Assuming this ID is on the login page form */
+    /* Styles for login form can go here if needed */
+}
+#errorMessage { /* Assuming this ID is on the login page */
+    /* Styles for error message on login page */
 }
 
-button {
-    padding: 0.7em 1.5em;
-    background-color: #007bff; /* Bootstrap primary blue */
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 1em;
+
+/* Button Styling */
+.btn {
+    border-radius: 0.5rem;
+    font-weight: 500;
+    padding: 0.5rem 1rem;
+    transition: all 0.2s ease-in-out;
+}
+.btn-lg {
+    padding: 0.75rem 1.5rem;
+    font-size: 1.1rem;
 }
 
-button:hover {
-    background-color: #0056b3; /* Darker blue on hover */
+/* Primary button (used on login page) */
+.btn-primary {
+    background-color: #007bff;
+    border-color: #007bff;
+}
+.btn-primary:hover {
+    background-color: #0056b3;
+    border-color: #004085;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
 }
 
-#errorMessage {
-    margin-top: 1em;
-    font-weight: bold;
+/* Outline danger button (logout) */
+.btn-outline-danger {
+    color: #dc3545;
+    border-color: #dc3545;
+}
+.btn-outline-danger:hover {
+    color: #fff;
+    background-color: #dc3545;
+    border-color: #dc3545;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(220,53,69,0.2);
+}
+body.dark-mode .btn-outline-danger {
+    color: #ff7b89;
+    border-color: #ff7b89;
+}
+body.dark-mode .btn-outline-danger:hover {
+    color: #1a1a1a;
+    background-color: #ff7b89;
+    border-color: #ff7b89;
 }
 
-/* --- Profile Page Styles --- */
-/* Combined styles for all main content sections on the profile page */
-#userInfo, #statistics, #userGradesInfo {
-    background-color: #fff;
-    padding: 1.5em;
-    margin-bottom: 1.5em;
-    border-radius: 5px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+/* List group item styling */
+.list-group-item {
+    padding: 0.75rem 1.25rem; /* This provides default padding for list items */
+    font-size: 1rem;
+}
+.list-group-flush .list-group-item:last-child {
+    border-bottom-width: 0; /* Remove bottom border for last item in flush list */
 }
 
-/* Styles for paragraphs within userInfo and h3/h2 elements within other sections */
-#userInfo p, #statistics h3, #userGradesInfo h2 {
-    margin-bottom: 0.8em;
-}
-
-#userInfo strong {
-    color: #555;
-}
-
-/* Styles for the grades list */
+/* Styles for the grades list (specific padding was handled by .list-group-item) */
 #userGradesInfo ul {
     list-style-type: none;
     padding-left: 0;
-    margin-top: 0; /* Remove default top margin for ul */
+    margin-top: 0;
 }
 
 #userGradesInfo li {
-    padding: 0.4em 0; /* Add some padding to list items */
-    border-bottom: 1px solid #eee; /* Separator line */
-    font-size: 0.9em; /* Slightly smaller font for list items */
+    /* Inherits padding from .list-group-item. Specific vertical padding can be added if needed. */
+    /* Example: padding-top: 0.4em; padding-bottom: 0.4em; */
+    /* Horizontal padding is now 1.25rem from .list-group-item */
+    border-bottom: 1px solid #eee; /* This is fine, but .list-group-flush handles borders too */
+    font-size: 0.9em; /* This is fine */
+}
+body.light-mode #userGradesInfo li { /* Ensure border color matches theme */
+    border-color: #e9ecef;
+}
+body.dark-mode #userGradesInfo li { /* Ensure border color matches theme */
+    border-color: #555;
 }
 
 #userGradesInfo li:last-child {
     border-bottom: none; /* Remove border from the last item */
 }
 
-/* Styles for SVG elements within the statistics section */
-#statistics svg {
-    display: block; /* Prevent extra space below SVG */
-    background-color: #f9f9f9;
-    border: 1px solid #eee;
-    margin-top: 0.5em;
+
+/* Footer */
+footer.text-muted {
+    font-size: 0.9em;
 }
 
-#logoutButton {
-    background-color: #dc3545; /* A red color for logout */
+/* Ensure SVG text elements like axis labels and pie chart labels are styled for visibility */
+#statistics svg text {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 10px; /* Or adjust as needed */
+}
+/* Specific for pie chart text to ensure contrast if it's black by default */
+#svgPassFail text {
+    /* The JS already sets fill to black, this CSS ensures it if JS fails or for other text */
 }
 
-#logoutButton:hover {
-    background-color: #c82333; /* Darker red on hover */
+/* Ensure SVG lines (axes) are visible */
+#statistics svg line {
+    stroke-width: 1px;
 }

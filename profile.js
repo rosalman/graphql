@@ -159,24 +159,25 @@ async function displayProfileData(token) {
         // --- END OF ADJUSTMENT ---
 
         // Populate Grades
-        const gradesList = document.getElementById('userGradesList');
+      const gradesList = document.getElementById('userGradesList');
         if (data.completedProjects && gradesList) {
             gradesList.innerHTML = ''; // Clear "Loading..."
             if (data.completedProjects.length > 0) {
                 data.completedProjects.forEach(project => {
                     const listItem = document.createElement('li');
+                    listItem.className = 'list-group-item'; // Add this class
                     const projectGrade = project.grade !== null ? project.grade.toFixed(2) : 'N/A';
                     const completionDate = project.updatedAt ? new Date(project.updatedAt).toLocaleDateString() : 'N/A';
                     listItem.textContent = `${project.object?.name || 'Unknown Project'}: ${projectGrade} (Graded: ${completionDate})`;
                     gradesList.appendChild(listItem);
                 });
             } else {
-                gradesList.innerHTML = '<li>No completed projects with grades found.</li>';
+                // Ensure placeholder also has the class for consistent styling
+                gradesList.innerHTML = '<li class="list-group-item">No completed projects with grades found.</li>';
             }
         } else if (gradesList) {
-            // This case might occur if data.completedProjects is undefined due to a query issue
-            // or if the element userGradesList was not found (though it should be).
-            gradesList.innerHTML = '<li>Could not load grade information.</li>';
+            // Ensure placeholder also has the class for consistent styling
+            gradesList.innerHTML = '<li class="list-group-item">Could not load grade information.</li>';
             console.warn("Completed projects data is missing or gradesList element not found.");
         }
 
