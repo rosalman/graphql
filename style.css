@@ -182,52 +182,26 @@ body.dark-mode .btn-outline-danger:hover {
 
 /* List group item styling */
 .list-group-item {
-    padding: 0.75rem 1.25rem; /* This provides default padding for list items */
+    padding: 0.75rem 1.25rem; 
     font-size: 1rem;
 }
 .list-group-flush .list-group-item:last-child {
-    border-bottom-width: 0; /* Remove bottom border for last item in flush list */
+    border-bottom-width: 0; 
 }
-
-/* Styles for the grades list (specific padding was handled by .list-group-item) */
-#userGradesInfo ul {
-    list-style-type: none;
-    padding-left: 0;
-    margin-top: 0;
-}
-
-#userGradesInfo li {
-    /* Inherits padding from .list-group-item. Specific vertical padding can be added if needed. */
-    /* Example: padding-top: 0.4em; padding-bottom: 0.4em; */
-    /* Horizontal padding is now 1.25rem from .list-group-item */
-    border-bottom: 1px solid #eee; /* This is fine, but .list-group-flush handles borders too */
-    font-size: 0.9em; /* This is fine */
-}
-body.light-mode #userGradesInfo li { /* Ensure border color matches theme */
-    border-color: #e9ecef;
-}
-body.dark-mode #userGradesInfo li { /* Ensure border color matches theme */
-    border-color: #555;
-}
-
-#userGradesInfo li:last-child {
-    border-bottom: none; /* Remove border from the last item */
-}
-
 
 /* Footer */
-footer.text-muted {
+footer.text-muted { /* This selector was incorrect, should be footer .text-muted or just footer */
     font-size: 0.9em;
 }
+footer .text-muted { /* Corrected selector */
+    font-size: 0.9em;
+}
+
 
 /* Ensure SVG text elements like axis labels and pie chart labels are styled for visibility */
 #statistics svg text {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     font-size: 10px; /* Or adjust as needed */
-}
-/* Specific for pie chart text to ensure contrast if it's black by default */
-#svgPassFail text {
-    /* The JS already sets fill to black, this CSS ensures it if JS fails or for other text */
 }
 
 /* Ensure SVG lines (axes) are visible */

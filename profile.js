@@ -2,24 +2,19 @@
 
 // Function to fetch data using GraphQL
 async function fetchGraphQL(query, token) {
-    // Use the domain from script.js, ensure it's correct
     const graphqlEndpoint = 'https://learn.reboot01.com/api/graphql-engine/v1/graphql';
     try {
-        // Log the token being sent (useful for debugging)
-        console.log("Token string being sent in fetch:", token);
-
         const response = await fetch(graphqlEndpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}` // Use the JWT token for authorization
+                'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify({ query: query })
         });
 
         if (!response.ok) {
             const errorBody = await response.text();
-            // Attempt to parse error body if it's JSON from Hasura
             let serverErrorMsg = errorBody;
             try {
                 const errorJson = JSON.parse(errorBody);
@@ -32,182 +27,273 @@ async function fetchGraphQL(query, token) {
 
         const result = await response.json();
         if (result.errors) {
-            // Extract meaningful error message if possible
             const errorMessage = result.errors.map(e => e.message).join('; ');
+            console.error(`GraphQL errors: ${errorMessage}`, result.errors);
             throw new Error(`GraphQL errors: ${errorMessage}`);
         }
         return result.data;
     } catch (error) {
         console.error('Error fetching GraphQL:', error);
-        // Display a user-friendly error message on the profile page
         const userInfoDiv = document.getElementById('userInfo');
-        if (userInfoDiv) {
+        if (userInfoDiv && !userInfoDiv.querySelector('p[style*="color: red"]')) {
              userInfoDiv.innerHTML = `<p style="color: red;">Error loading profile data. Please check console or try logging in again.</p><p style="color: red; font-size: 0.8em;">${error.message}</p>`;
+        } else if (!userInfoDiv) {
+            const userLoginSpan = document.getElementById('userLogin');
+            const userXPSpan = document.getElementById('userXP');
+            const userAuditsSpan = document.getElementById('userAudits');
+            if(userLoginSpan) userLoginSpan.textContent = 'Error';
+            if(userXPSpan) userXPSpan.textContent = 'Error';
+            if(userAuditsSpan) userAuditsSpan.textContent = 'Error';
         }
-        // Clear other fields potentially
-        const userLoginSpan = document.getElementById('userLogin');
-        const userXPSpan = document.getElementById('userXP');
-        const userAuditsSpan = document.getElementById('userAudits');
-        if(userLoginSpan) userLoginSpan.textContent = 'Error';
-        if(userXPSpan) userXPSpan.textContent = 'Error';
-        if(userAuditsSpan) userAuditsSpan.textContent = 'Error';
-        return null; // Indicate failure
+        const lastActivityList = document.getElementById('lastActivityListProfile');
+        if (lastActivityList && lastActivityList.innerHTML.includes('Loading last activity...')) {
+            lastActivityList.innerHTML = '<li class="list-group-item text-danger">Error loading data.</li>';
+        }
+        return null;
     }
 }
 
-// Function to format XP amount (Bytes to kB/MB)
-function formatXP(amount) {
-    if (amount === null || amount === undefined) return '0 B'; // Return '0 B' for consistency
-    if (amount < 1000) {
-        return `${amount} B`;
-    } else if (amount < 1000000) {
-        // Use 1 decimal place for kB as per common convention
-        return `${(amount / 1000).toFixed(1)} kB`;
+// Function to format audit values
+function formatAuditValue(value) {
+    if (value === null || value === undefined || isNaN(value)) return '0 bytes';
+    const bytesInMB = 1000 * 1000;
+    const bytesInKB = 1000;
+
+    if (value >= bytesInMB) {
+        return `${(value / bytesInMB).toFixed(2)} MB`;
+    } else if (value >= bytesInKB) {
+        return `${Math.round(value / bytesInKB)} kB`;
     } else {
-        // Use 2 decimal places for MB
-        return `${(amount / 1000000).toFixed(2)} MB`;
+        return `${Math.round(value)} bytes`;
     }
 }
 
+// GraphQL query for last projects (similar to dashboard.js)
+const lastProjectsQueryProfile = `
+  query GetLastProjectsProfile {
+    transaction(
+      where: {
+        type: { _eq: "xp" } # XP transactions are often associated with project completion
+        _and: [
+          { path: { _like: "/bahrain/bh-module%" } },
+          { path: { _nlike: "/bahrain/bh-module/checkpoint%" } },
+          { path: { _nlike: "/bahrain/bh-module/piscine-js%" } }
+        ]
+      }
+      order_by: { createdAt: desc }
+      # limit: 4 # Temporarily removed for diagnostics
+    ) {
+      object {
+        type
+        name
+      }
+      createdAt
+    }
+  }
+`;
 
-// Function to fetch and display profile data// ...existing code...
+// Function to fetch and display profile data
 async function displayProfileData(token) {
-    const query = `
-        query GetUserProfileData {
+    const userInfoQuery = `
+        query GetUserInfo {
           user {
             id
             login
-          }
-          xp: transaction_aggregate(where: {type: {_eq: "xp"}}) {
-            aggregate {
-              sum {
-                amount
-              }
-            }
-          }
-          # --- TEMPORARILY COMMENTED OUT ---
-          # auditUp: transaction_aggregate(where: {type: {_eq: "up"}}) {
-          #    aggregate {
-          #      sum {
-          #        amount
-          #      }
-          #    }
-          # }
-          # auditDown: transaction_aggregate(where: {type: {_eq: "down"}}) {
-          #    aggregate {
-          #      sum {
-          #        amount
-          #      }
-          #    }
-          # }
-          # --- END OF TEMPORARY COMMENT ---
-          xpTransactions: transaction(where: {type: {_eq: "xp"}}, order_by: {createdAt: asc}) {
-            amount
-            createdAt
-            objectId
-          }
-          auditsDone: audit(where: {grade: {_is_null: false}}, order_by: {createdAt: asc}) {
-             grade
-             createdAt
-          }
-          completedProjects: progress(
-            where: { isDone: {_eq: true}, grade: { _is_null: false } }
-            order_by: { updatedAt: desc }
-            limit: 10
-          ) {
-            grade
-            updatedAt
-            object {
-              name
-            }
+            auditRatio
+            totalUp
+            totalDown
           }
         }
     `;
+    console.log("Fetching user info...");
+    const userInfoData = await fetchGraphQL(userInfoQuery, token);
 
-    console.log("Fetching data with token:", token ? "Present" : "Missing");
-    const data = await fetchGraphQL(query, token);
-
-    if (data) {
-        console.log("Received data:", data);
-
-        // Populate user info
-        if (data.user && data.user.length > 0) {
-            const user = data.user[0];
-            document.getElementById('userLogin').textContent = user.login || 'N/A';
-            console.log("User ID:", user.id);
-        } else {
-             document.getElementById('userLogin').textContent = 'Not found';
-             console.warn("User data not found in response.");
+    if (!userInfoData || !userInfoData.user || userInfoData.user.length === 0) {
+        console.error("Failed to fetch user basic data or user data is empty.");
+        if(document.getElementById('userLogin')) document.getElementById('userLogin').textContent = 'Error';
+        if(document.getElementById('userXP')) document.getElementById('userXP').textContent = 'Error';
+        if(document.getElementById('userAudits')) document.getElementById('userAudits').textContent = 'Error';
+        const lastActivityList = document.getElementById('lastActivityListProfile');
+        if (lastActivityList) {
+            lastActivityList.innerHTML = '<li class="list-group-item text-danger">Could not load user data.</li>';
         }
-
-        const totalXp = data.xp?.aggregate?.sum?.amount;
-        document.getElementById('userXP').textContent = formatXP(totalXp);
-
-        // --- ADJUSTED FOR TEMPORARY REMOVAL ---
-        const totalUp = data.auditUp?.aggregate?.sum?.amount ?? 0; // Will be 0 if auditUp is commented out
-        const totalDown = data.auditDown?.aggregate?.sum?.amount ?? 0; // Will be 0 if auditDown is commented out
-        let auditRatio = 'N/A';
-        // Keep the logic, it will just show 0 for up/down if they are not fetched
-        if (totalDown > 0) {
-            auditRatio = (totalUp / totalDown).toFixed(1);
-        } else if (totalUp > 0) {
-            auditRatio = 'Infinity';
-        } else {
-            auditRatio = '0.0';
-        }
-        document.getElementById('userAudits').textContent = `Ratio: ${auditRatio} (Done: ${formatXP(totalUp)} / Received: ${formatXP(totalDown)})`;
-        // --- END OF ADJUSTMENT ---
-
-        // Populate Grades
-      const gradesList = document.getElementById('userGradesList');
-        if (data.completedProjects && gradesList) {
-            gradesList.innerHTML = ''; // Clear "Loading..."
-            if (data.completedProjects.length > 0) {
-                data.completedProjects.forEach(project => {
-                    const listItem = document.createElement('li');
-                    listItem.className = 'list-group-item'; // Add this class
-                    const projectGrade = project.grade !== null ? project.grade.toFixed(2) : 'N/A';
-                    const completionDate = project.updatedAt ? new Date(project.updatedAt).toLocaleDateString() : 'N/A';
-                    listItem.textContent = `${project.object?.name || 'Unknown Project'}: ${projectGrade} (Graded: ${completionDate})`;
-                    gradesList.appendChild(listItem);
-                });
-            } else {
-                // Ensure placeholder also has the class for consistent styling
-                gradesList.innerHTML = '<li class="list-group-item">No completed projects with grades found.</li>';
-            }
-        } else if (gradesList) {
-            // Ensure placeholder also has the class for consistent styling
-            gradesList.innerHTML = '<li class="list-group-item">Could not load grade information.</li>';
-            console.warn("Completed projects data is missing or gradesList element not found.");
-        }
-
-
-        renderXpOverTimeGraph(data.xpTransactions || []);
-        renderPassFailRatioGraph(data.auditsDone || []);
-
-    } else {
-        console.error("Failed to fetch or process profile data.");
+        return;
     }
+
+    const user = userInfoData.user[0];
+    const rawUserId = user.id; // Get the raw ID first
+
+    if (rawUserId === undefined || rawUserId === null) {
+        console.error("User ID is null or undefined from API.");
+        if(document.getElementById('userLogin')) document.getElementById('userLogin').textContent = (user.login || 'N/A') + ' (ID missing)';
+        if(document.getElementById('userXP')) document.getElementById('userXP').textContent = 'Error';
+        if(document.getElementById('userAudits')) document.getElementById('userAudits').textContent = 'Error';
+        const lastActivityList = document.getElementById('lastActivityListProfile');
+        if (lastActivityList) {
+            lastActivityList.innerHTML = '<li class="list-group-item text-danger">Critical error: User ID missing.</li>';
+        }
+        renderXpOverTimeGraph([]);
+        renderPassFailRatioGraph([]);
+        return;
+    }
+
+    const userId = parseInt(rawUserId, 10); // Parse to integer
+
+    if (isNaN(userId)) {
+        console.error("Failed to parse user ID into an integer. Original ID:", rawUserId);
+        if(document.getElementById('userLogin')) document.getElementById('userLogin').textContent = (user.login || 'N/A') + ' (ID invalid)';
+        if(document.getElementById('userXP')) document.getElementById('userXP').textContent = 'Error';
+        if(document.getElementById('userAudits')) document.getElementById('userAudits').textContent = 'Error';
+        const lastActivityList = document.getElementById('lastActivityListProfile');
+        if (lastActivityList) {
+            lastActivityList.innerHTML = '<li class="list-group-item text-danger">Critical error: User ID invalid.</li>';
+        }
+        renderXpOverTimeGraph([]);
+        renderPassFailRatioGraph([]);
+        return;
+    }
+
+
+    if(document.getElementById('userLogin')) document.getElementById('userLogin').textContent = user.login || 'N/A';
+    console.log("User ID (parsed as int):", userId);
+
+    const auditRatioValue = user.auditRatio;
+    const totalUp = user.totalUp;
+    const totalDown = user.totalDown;
+    let auditRatioDisplay = 'N/A';
+
+    if (typeof auditRatioValue === 'number') {
+        auditRatioDisplay = auditRatioValue.toFixed(1);
+    } else if (totalDown === 0 && totalUp > 0) {
+        auditRatioDisplay = 'Infinity';
+    } else if (totalDown === 0 && totalUp === 0) {
+        auditRatioDisplay = '0.0';
+    }
+
+    if(document.getElementById('userAudits')) {
+        document.getElementById('userAudits').textContent =
+            `Ratio: ${auditRatioDisplay} (Done: ${formatAuditValue(totalUp)} / Received: ${formatAuditValue(totalDown)})`;
+    }
+
+    const constructedXpQuery = `
+      query GetUserXP {
+        transaction_aggregate(
+          where: {
+            event: { path: { _eq: "/bahrain/bh-module" } }
+            type: { _eq: "xp" }
+            userId: { _eq: ${userId} } # Use the parsed integer userId
+          }
+        ) {
+          aggregate {
+            sum {
+              amount
+            }
+          }
+        }
+      }`;
+
+    console.log("Fetching XP data...");
+    const xpDataResponse = await fetchGraphQL(constructedXpQuery, token);
+
+    if (xpDataResponse && xpDataResponse.transaction_aggregate) {
+        const rawXp = xpDataResponse.transaction_aggregate.aggregate?.sum?.amount;
+        let displayXpText;
+        if (rawXp === null || rawXp === undefined || isNaN(rawXp)) {
+            displayXpText = '0 kB';
+        } else if (rawXp >= 999900) {
+            const xpInMB = (rawXp / 1000000).toFixed(2);
+            displayXpText = `${xpInMB} MB`;
+        } else {
+            const displayXpVal = Math.round(rawXp / 1000);
+            displayXpText = `${displayXpVal} kB`;
+        }
+        if(document.getElementById('userXP')) document.getElementById('userXP').textContent = displayXpText;
+    } else {
+        if(document.getElementById('userXP')) document.getElementById('userXP').textContent = 'Error';
+        console.error("Failed to fetch or process XP data:", xpDataResponse ? xpDataResponse.errors : "No data returned for XP");
+    }
+
+    // Fetch Last Activity (Projects)
+    console.log("Fetching last projects data...");
+    // Note: lastProjectsQueryProfile does not use userId, so it's fine as is.
+    // If it needed userId, it would have to be constructed dynamically like constructedXpQuery.
+    const lastProjectsDataResponse = await fetchGraphQL(lastProjectsQueryProfile, token);
+    const lastActivityList = document.getElementById('lastActivityListProfile');
+
+    if (lastActivityList) {
+        lastActivityList.innerHTML = ''; // Clear "Loading..."
+        if (lastProjectsDataResponse && lastProjectsDataResponse.transaction && lastProjectsDataResponse.transaction.length > 0) {
+            lastProjectsDataResponse.transaction.forEach(projectEntry => {
+                const listItem = document.createElement('li');
+                listItem.classList.add('list-group-item');
+                const projectType = projectEntry.object?.type || 'Project';
+                const projectName = projectEntry.object?.name || 'Unnamed Project';
+                listItem.textContent = `${projectType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} — ${projectName}`;
+                lastActivityList.appendChild(listItem);
+            });
+        } else if (lastProjectsDataResponse && lastProjectsDataResponse.transaction) {
+            const listItem = document.createElement('li');
+            listItem.classList.add('list-group-item');
+            listItem.textContent = 'No recent project activity found.';
+            lastActivityList.appendChild(listItem);
+        } else {
+            const listItem = document.createElement('li');
+            listItem.classList.add('list-group-item', 'text-danger');
+            listItem.textContent = 'Error loading last project activity.';
+            if (lastProjectsDataResponse && lastProjectsDataResponse.errors) {
+                console.error("GraphQL errors fetching last projects:", lastProjectsDataResponse.errors);
+            }
+            lastActivityList.appendChild(listItem);
+        }
+    } else {
+        console.warn("lastActivityListProfile element not found.");
+    }
+
+    // Queries for graphs
+    const xpTransactionsQuery = `
+        query GetXpTransactions {
+          transaction(
+            where: {
+              type: {_eq: "xp"}
+              event: { path: { _eq: "/bahrain/bh-module" } }
+              userId: { _eq: ${userId} } # Use the parsed integer userId
+            },
+            order_by: {createdAt: asc}
+          ) {
+            amount
+            createdAt
+          }
+        }`;
+    const auditsDoneQuery = `
+        query GetAuditsDone {
+          audit( # This query is general, not user-specific. If it needs to be user-specific, add userId filter.
+            where: { grade: {_is_null: false} },
+            order_by: {createdAt: asc}
+          ) {
+             grade
+             createdAt
+          }
+        }`;
+
+    console.log("Fetching data for graphs...");
+    const graphXpData = await fetchGraphQL(xpTransactionsQuery, token);
+    const graphAuditData = await fetchGraphQL(auditsDoneQuery, token);
+
+    renderXpOverTimeGraph(graphXpData?.transaction || []);
+    renderPassFailRatioGraph(graphAuditData?.audit || []);
 }
 
-
-// --- SVG Graph Rendering Functions (Placeholders - Implement these next) ---
-// NOTE: These are basic implementations and likely need refinement
 
 function renderXpOverTimeGraph(xpData) {
     console.log("Rendering XP over time graph with data:", xpData);
     const svg = document.getElementById('svgXpOverTime');
     if (!svg) return;
-    // Clear previous graph content
     svg.innerHTML = '';
 
-    // --- Basic SVG rendering logic ---
-    // 1. Define SVG dimensions and margins
     const margin = { top: 20, right: 30, bottom: 40, left: 60 };
     const width = +svg.getAttribute('width') - margin.left - margin.right;
     const height = +svg.getAttribute('height') - margin.top - margin.bottom;
 
-    // 2. Create a group element shifted by margins
     const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
     g.setAttribute("transform", `translate(${margin.left},${margin.top})`);
     svg.appendChild(g);
@@ -222,130 +308,96 @@ function renderXpOverTimeGraph(xpData) {
         return;
     }
 
-    // 3. Process data: Convert dates, calculate cumulative XP if needed
     let cumulativeXp = 0;
     const processedData = xpData.map(d => {
         cumulativeXp += d.amount;
         return {
             date: new Date(d.createdAt),
-            value: cumulativeXp // Plot cumulative XP
-            // value: d.amount // Or plot individual transaction amounts
+            value: cumulativeXp
         };
     });
 
-    // 4. Define scales (time for X, linear for Y)
-    // Ensure dates are valid before finding min/max
     const validDates = processedData.map(d => d.date.getTime()).filter(t => !isNaN(t));
     if (validDates.length === 0) {
          const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
         text.setAttribute("x", width / 2);
         text.setAttribute("y", height / 2);
         text.setAttribute("text-anchor", "middle");
-        text.textContent = "Invalid date data.";
+        text.textContent = "Invalid date data for XP graph.";
         g.appendChild(text);
         return;
     }
     const minDate = new Date(Math.min(...validDates));
     const maxDate = new Date(Math.max(...validDates));
 
-    const xScale = {
-        min: minDate,
-        max: maxDate,
-        range: width
-    };
-    const yScale = {
-        min: 0, // Start Y axis at 0
-        max: Math.max(1, ...processedData.map(d => d.value)), // Ensure max is at least 1 to avoid division by zero
-        range: height
-    };
+    const xScale = { min: minDate, max: maxDate, range: width };
+    const yScale = { min: 0, max: Math.max(1, ...processedData.map(d => d.value)), range: height };
 
-    // Helper to map data value to SVG coordinate
     const mapX = (date) => {
         const timeDiff = xScale.max.getTime() - xScale.min.getTime();
-        if (timeDiff <= 0) return 0; // Avoid division by zero if only one data point
+        if (timeDiff <= 0) return 0;
         return ((date.getTime() - xScale.min.getTime()) / timeDiff) * xScale.range;
     }
     const mapY = (value) => {
         const valueRange = yScale.max - yScale.min;
-        if (valueRange <= 0) return yScale.range; // Avoid division by zero
-        return yScale.range - ((value - yScale.min) / valueRange) * yScale.range; // Invert Y for SVG
+        if (valueRange <= 0) return yScale.range;
+        return yScale.range - ((value - yScale.min) / valueRange) * yScale.range;
     }
 
-    // 5. Draw Axes (basic lines and labels)
-    // X Axis Line
     const xAxisLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    xAxisLine.setAttribute("x1", 0);
-    xAxisLine.setAttribute("y1", height);
-    xAxisLine.setAttribute("x2", width);
-    xAxisLine.setAttribute("y2", height);
-    xAxisLine.setAttribute("stroke", "black");
+    xAxisLine.setAttribute("x1", 0); xAxisLine.setAttribute("y1", height);
+    xAxisLine.setAttribute("x2", width); xAxisLine.setAttribute("y2", height);
     g.appendChild(xAxisLine);
-    // Y Axis Line
+
     const yAxisLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    yAxisLine.setAttribute("x1", 0);
-    yAxisLine.setAttribute("y1", 0);
-    yAxisLine.setAttribute("x2", 0);
-    yAxisLine.setAttribute("y2", height);
-    yAxisLine.setAttribute("stroke", "black");
+    yAxisLine.setAttribute("x1", 0); yAxisLine.setAttribute("y1", 0);
+    yAxisLine.setAttribute("x2", 0); yAxisLine.setAttribute("y2", height);
     g.appendChild(yAxisLine);
 
-    // Add Axis Labels (simple)
     const xLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    xLabel.setAttribute("x", width / 2);
-    xLabel.setAttribute("y", height + margin.bottom - 10); // Adjusted position
-    xLabel.setAttribute("text-anchor", "middle");
-    xLabel.textContent = "Time";
+    xLabel.setAttribute("x", width / 2); xLabel.setAttribute("y", height + margin.bottom - 10);
+    xLabel.setAttribute("text-anchor", "middle"); xLabel.textContent = "Time";
     g.appendChild(xLabel);
 
     const yLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
     yLabel.setAttribute("transform", "rotate(-90)");
-    yLabel.setAttribute("x", -height / 2);
-    yLabel.setAttribute("y", -margin.left + 20); // Adjusted position
-    yLabel.setAttribute("text-anchor", "middle");
-    yLabel.textContent = "Cumulative XP";
+    yLabel.setAttribute("x", -height / 2); yLabel.setAttribute("y", -margin.left + 20);
+    yLabel.setAttribute("text-anchor", "middle"); yLabel.textContent = "Cumulative XP";
     g.appendChild(yLabel);
 
-    // 6. Draw the data (e.g., a line chart)
     const linePath = document.createElementNS("http://www.w3.org/2000/svg", "path");
     let dAttribute = "";
-    processedData.forEach((point, index) => {
-        if (isNaN(point.date.getTime())) return; // Skip invalid dates
-        const x = mapX(point.date);
-        const y = mapY(point.value);
-        if (index === 0 || dAttribute === "") {
-            dAttribute += `M${x},${y}`; // MoveTo first valid point
+    let firstValidPoint = true;
+    processedData.forEach((point) => {
+        if (isNaN(point.date.getTime())) return;
+        const x = mapX(point.date); const y = mapY(point.value);
+        if (firstValidPoint) {
+            dAttribute += `M${x},${y}`; firstValidPoint = false;
         } else {
-            dAttribute += ` L${x},${y}`; // LineTo subsequent valid points
+            dAttribute += ` L${x},${y}`;
         }
     });
 
-    if (dAttribute) { // Only draw if path data exists
+    if (dAttribute && !firstValidPoint) {
         linePath.setAttribute("d", dAttribute);
-        linePath.setAttribute("fill", "none");
-        linePath.setAttribute("stroke", "steelblue");
+        linePath.setAttribute("fill", "none"); linePath.setAttribute("stroke", "steelblue");
         linePath.setAttribute("stroke-width", 2);
         g.appendChild(linePath);
 
-        // Add points (optional)
         processedData.forEach(point => {
-            if (isNaN(point.date.getTime())) return; // Skip invalid dates
+            if (isNaN(point.date.getTime())) return;
             const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-            circle.setAttribute("cx", mapX(point.date));
-            circle.setAttribute("cy", mapY(point.value));
-            circle.setAttribute("r", 3);
-            circle.setAttribute("fill", "steelblue");
+            circle.setAttribute("cx", mapX(point.date)); circle.setAttribute("cy", mapY(point.value));
+            circle.setAttribute("r", 3); circle.setAttribute("fill", "steelblue");
             g.appendChild(circle);
         });
-    } else {
-         const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        text.setAttribute("x", width / 2);
-        text.setAttribute("y", height / 2);
-        text.setAttribute("text-anchor", "middle");
-        text.textContent = "No valid data points to draw.";
+    } else if (processedData.length > 0) {
+        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        text.setAttribute("x", width / 2); text.setAttribute("y", height / 2);
+        text.setAttribute("text-anchor", "middle"); text.textContent = "Not enough data to draw line.";
         g.appendChild(text);
     }
 }
-
 
 
 function renderPassFailRatioGraph(auditData) {
@@ -354,34 +406,28 @@ function renderPassFailRatioGraph(auditData) {
     if (!svg) return;
     svg.innerHTML = ''; // Clear previous graph
 
-    // --- Basic SVG rendering logic for a Pie/Donut Chart ---
-    const width = +svg.getAttribute('width');
-    const height = +svg.getAttribute('height');
-    const radius = Math.min(width, height) / 2 - 20; // Increased margin for labels
-    const centerX = width / 2;
-    const centerY = height / 2;
+    const width = +svg.getAttribute('width'); const height = +svg.getAttribute('height');
+    const radius = Math.min(width, height) / 2 - 20; // Padding for labels
+    const centerX = width / 2; const centerY = height / 2;
 
     const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
     g.setAttribute("transform", `translate(${centerX},${centerY})`);
     svg.appendChild(g);
 
     if (!auditData || auditData.length === 0) {
-        // ... (keep existing no data message code) ...
         const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        text.setAttribute("x", 0); // Centered due to transform
-        text.setAttribute("y", 0); // Centered due to transform
+        text.setAttribute("x", 0); // Centered due to 'g' transform
+        text.setAttribute("y", 0); // Centered due to 'g' transform
         text.setAttribute("text-anchor", "middle");
         text.textContent = "No audit data available.";
         g.appendChild(text);
         return;
     }
 
-    // 1. Process data: Count passes (grade >= 1) and fails (grade < 1)
-    let passes = 0;
-    let fails = 0;
+    let passes = 0; let fails = 0;
     auditData.forEach(audit => {
-        if (typeof audit.grade === 'number') {
-            if (audit.grade >= 1) {
+        if (typeof audit.grade === 'number') { // Ensure grade is a number
+            if (audit.grade >= 1) { // Assuming grade >= 1 is a pass
                 passes++;
             } else {
                 fails++;
@@ -391,7 +437,6 @@ function renderPassFailRatioGraph(auditData) {
     const total = passes + fails;
 
     if (total === 0) {
-        // ... (keep existing no valid grades message code) ...
          const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
         text.setAttribute("x", 0);
         text.setAttribute("y", 0);
@@ -401,193 +446,119 @@ function renderPassFailRatioGraph(auditData) {
         return;
     }
 
-
-    // 2. Calculate angles for pie slices
-    const passAngle = (passes / total) * 2 * Math.PI;
-    const failAngle = (fails / total) * 2 * Math.PI;
-
-    let currentAngle = -Math.PI / 2; // Start at the top
-
-    // Helper function to create a pie slice path
+    // Function to create a pie slice path (used only for mixed pass/fail)
     function createSlice(startAngle, endAngle, color) {
-        // *** Handle full circle case by slightly adjusting endAngle ***
-        // This is a common workaround, though drawing two halves is often cleaner
-        // if (endAngle - startAngle >= Math.PI * 2) {
-        //     endAngle = startAngle + Math.PI * 1.9999; // Slightly less than full circle
-        // }
-        // *** A better way: draw two halves for full circle ***
-        // (We'll implement this logic in the drawing section below)
-
-
         const largeArcFlag = endAngle - startAngle <= Math.PI ? "0" : "1";
         const startX = radius * Math.cos(startAngle);
         const startY = radius * Math.sin(startAngle);
         const endX = radius * Math.cos(endAngle);
         const endY = radius * Math.sin(endAngle);
-
+        // Path: Move to center, Line to start of arc, Arc to end, Line back to center
         const d = `M 0,0 L ${startX},${startY} A ${radius},${radius} 0 ${largeArcFlag} 1 ${endX},${endY} Z`;
-
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
         path.setAttribute("d", d);
         path.setAttribute("fill", color);
         return path;
     }
 
-    // 3. Draw slices
-    // *** Modified logic to handle 100% cases ***
-    if (passes === total) { // 100% Pass
-        // Draw two green semi-circles
-        const halfAngle = Math.PI;
-        const slice1 = createSlice(currentAngle, currentAngle + halfAngle, "mediumseagreen");
-        const slice2 = createSlice(currentAngle + halfAngle, currentAngle + 2 * halfAngle, "mediumseagreen");
-        g.appendChild(slice1);
-        g.appendChild(slice2);
-    } else if (fails === total) { // 100% Fail
-        // Draw two red semi-circles
-        const halfAngle = Math.PI;
-        const slice1 = createSlice(currentAngle, currentAngle + halfAngle, "tomato");
-        const slice2 = createSlice(currentAngle + halfAngle, currentAngle + 2 * halfAngle, "tomato");
-        g.appendChild(slice1);
-        g.appendChild(slice2);
-    } else { // Mixed passes and fails
-        // Original logic for drawing partial slices
+    if (passes === total) { // All passes
+        const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        circle.setAttribute("cx", 0);
+        circle.setAttribute("cy", 0);
+        circle.setAttribute("r", radius);
+        circle.setAttribute("fill", "mediumseagreen");
+        g.appendChild(circle);
+    } else if (fails === total) { // All fails
+        const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        circle.setAttribute("cx", 0);
+        circle.setAttribute("cy", 0);
+        circle.setAttribute("r", radius);
+        circle.setAttribute("fill", "tomato");
+        g.appendChild(circle);
+    } else { // Mix of passes and fails
+        let currentAngle = -Math.PI / 2; // Start at the top (12 o'clock)
+
+        // Draw pass slice
         if (passes > 0) {
+            const passAngle = (passes / total) * 2 * Math.PI;
             const passSlice = createSlice(currentAngle, currentAngle + passAngle, "mediumseagreen");
             g.appendChild(passSlice);
             currentAngle += passAngle;
         }
+
+        // Draw fail slice
         if (fails > 0) {
+            const failAngle = (fails / total) * 2 * Math.PI;
+            // The fail slice starts where the pass slice ended and completes the circle.
             const failSlice = createSlice(currentAngle, currentAngle + failAngle, "tomato");
             g.appendChild(failSlice);
         }
     }
 
-
-    // 4. Add Labels (Set to a contrasting color like black)
     const passPercentage = ((passes / total) * 100).toFixed(1);
     const failPercentage = ((fails / total) * 100).toFixed(1);
 
+    // Add text labels for percentages
     const titleText = document.createElementNS("http://www.w3.org/2000/svg", "text");
     titleText.setAttribute("x", 0);
-    titleText.setAttribute("y", -10);
+    titleText.setAttribute("y", -5); // Adjusted y for spacing
     titleText.setAttribute("text-anchor", "middle");
     titleText.setAttribute("font-size", "10px");
     titleText.textContent = `Pass: ${passPercentage}%`;
-    // *** Change fill to black for contrast ***
-    titleText.setAttribute("fill", "black");
     g.appendChild(titleText);
 
-    const failText = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    failText.setAttribute("x", 0);
-    failText.setAttribute("y", 10);
-    failText.setAttribute("text-anchor", "middle");
-    failText.setAttribute("font-size", "10px");
-    failText.textContent = `Fail: ${failPercentage}%`;
-    // *** Change fill to black for contrast ***
-    failText.setAttribute("fill", "black");
-    g.appendChild(failText);
-
+    const failTextElement = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    failTextElement.setAttribute("x", 0);
+    failTextElement.setAttribute("y", 15); // Adjusted y for spacing
+    failTextElement.setAttribute("text-anchor", "middle");
+    failTextElement.setAttribute("font-size", "10px");
+    failTextElement.textContent = `Fail: ${failPercentage}%`;
+    g.appendChild(failTextElement);
 }
 
 
-
-
-// --- START OF MODIFIED SECTION ---
-
-// Function to handle logout using cookies
 async function logout() {
-    const token = Cookies.get('jwtToken'); // Get token for potential API calls
+    const token = Cookies.get('jwtToken'); // Use 'jwtToken'
 
-    // Optional: Call server endpoints like the working example
     try {
         if (token) {
             console.log("Attempting server-side logout calls...");
-            // Call expire endpoint (optional, but good practice)
             await fetch('https://learn.reboot01.com/api/auth/expire', {
-                method: 'GET', // Or POST depending on the API
+                method: 'GET',
                 headers: { 'Authorization': `Bearer ${token}` }
-            });
-            // Call signout endpoint (optional, but good practice)
+            }).catch(e => console.warn("Expire call failed (may be expected):", e.message));
+
             await fetch('https://learn.reboot01.com/api/auth/signout', {
-                method: 'POST', // Or GET depending on the API
+                method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` }
-            });
+            }).catch(e => console.warn("Signout call failed (may be expected):", e.message));
             console.log("Server-side logout calls attempted.");
         }
     } catch (error) {
-        console.warn('Error during server-side logout calls (may be expected if token already invalid):', error);
-        // Don't prevent client-side logout even if server calls fail
+        console.warn('Error during server-side logout calls:', error);
     }
 
-    Cookies.remove('jwtToken'); // Use Cookies.remove
-    console.log('Logged out, cookie removed.');
-    window.location.href = 'index.html'; // Redirect to login
+    Cookies.remove('jwtToken'); // Use 'jwtToken'
+    console.log('Logged out, jwtToken cookie removed.');
+    window.location.href = 'index.html';
 }
 
-// --- Execution and Event Handling ---
-
-// Central function to check auth and set up the page
-function setupProfilePage() {
-    const token = Cookies.get('jwtToken');
-
-    if (!token) {
-        console.log('Profile setup: No token. Redirecting to login.');
-        window.location.href = 'index.html';
-        return; // Crucial: stop further script execution for this page load
-    }
-
-    // Token exists, proceed with setup
-    console.log('Profile setup: Token found. Initializing page.');
-    displayProfileData(token);
-
-    const logoutButton = document.getElementById('logoutButton');
-    if (logoutButton) {
-        // Check if listener already attached to prevent duplicates if setupProfilePage is called multiple times
-        if (!logoutButton.hasAttribute('data-listener-attached')) {
-            logoutButton.addEventListener('click', logout);
-            logoutButton.setAttribute('data-listener-attached', 'true');
-        }
-    } else {
-        console.warn('Logout button not found.');
-    }
-
-    // Setup navigation management (prevent back, handle popstate)
-    // This should only be set up once per "true" page load.
-    if (!window.profileNavigationHandlerAttached) {
-        history.pushState(null, document.title, location.href); // Add current page to history again
-
-        window.addEventListener('popstate', function() {
-            // This event fires when the active history entry changes due to back/forward navigation
-            if (Cookies.get('jwtToken')) {
-                // If token still exists (user is logged in),
-                // and user tries to navigate away from profile.html via "back",
-                // push profile.html state again to keep them on the page.
-                history.pushState(null, document.title, location.href);
-            } else {
-                // If token does not exist (user logged out or session expired),
-                // redirect to login page.
-                window.location.href = 'index.html';
-            }
-        });
-        window.profileNavigationHandlerAttached = true;
-    }
-}
 
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOMContentLoaded event fired.');
-    window.profileNavigationHandlerAttached = false; // Reset flag for a full page load
-    setupProfilePage();
-});
+    const token = Cookies.get('jwtToken'); // Use 'jwtToken'
 
-window.addEventListener('pageshow', (event) => {
-    // The pageshow event fires when a session history entry is being traversed to.
-    // event.persisted is true if the page was restored from the bfcache.
-    if (event.persisted) {
-        console.log('pageshow event fired: Page was restored from bfcache.');
-        // Re-run setup. It will check token. If token is gone, it redirects.
-        // If token is present, displayProfileData will refresh data.
-        // The profileNavigationHandlerAttached flag prevents re-attaching popstate listener.
-        setupProfilePage();
+    if (!token) {
+        console.log('No jwtToken cookie found, redirecting to login.');
+        window.location.href = 'index.html';
+    } else {
+        console.log('jwtToken cookie found, fetching profile data...');
+        displayProfileData(token);
+
+        const logoutButton = document.getElementById('logoutButton');
+        if (logoutButton) {
+            logoutButton.addEventListener('click', logout);
+        } else {
+            console.warn('Logout button not found.');
+        }
     }
 });
-// --- END OF MODIFIED SECTION ---
